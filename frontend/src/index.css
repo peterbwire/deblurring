@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --bg-primary: #07111f;
+  --bg-panel: rgba(17, 29, 48, 0.68);
+  --border-soft: rgba(121, 215, 255, 0.14);
+  --text-main: #e8f0ff;
+  --text-muted: #98a6c2;
+  --accent: #79d7ff;
+  --accent-soft: rgba(121, 215, 255, 0.16);
+  --signal: #9fffe0;
+  --warning: #ffca6b;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: "Space Grotesk", "Aptos", "Segoe UI", sans-serif;
+  background:
+    linear-gradient(rgba(14, 24, 40, 0.3) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 24, 40, 0.3) 1px, transparent 1px),
+    radial-gradient(circle at top left, rgba(121, 215, 255, 0.14), transparent 30%),
+    radial-gradient(circle at 80% 18%, rgba(159, 255, 224, 0.08), transparent 24%),
+    linear-gradient(180deg, #081120 0%, #091524 48%, #060d18 100%);
+  background-size: 36px 36px, 36px 36px, auto, auto, auto;
+  color: var(--text-main);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(121, 215, 255, 0.24);
+  color: #f4fbff;
+}
+
+.glass-panel {
+  border: 1px solid var(--border-soft);
+  background: linear-gradient(180deg, rgba(20, 31, 50, 0.82), rgba(10, 18, 32, 0.72));
+  box-shadow: 0 24px 80px rgba(2, 12, 24, 0.45);
+  backdrop-filter: blur(18px);
+}
+
+.section-title {
+  font-family: "Sora", "Trebuchet MS", "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.action-button {
+  @apply inline-flex items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition duration-200;
+  background: linear-gradient(135deg, rgba(121, 215, 255, 0.92), rgba(88, 184, 255, 0.88));
+  color: #04111f;
+  box-shadow: 0 18px 50px rgba(27, 122, 190, 0.25);
+}
+
+.action-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 24px 60px rgba(27, 122, 190, 0.34);
+}
+
+.action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
+.subtle-button {
+  @apply inline-flex items-center justify-center rounded-2xl border px-4 py-3 text-sm font-medium transition;
+  border-color: rgba(121, 215, 255, 0.18);
+  background: rgba(121, 215, 255, 0.05);
+  color: #dcecff;
+}
+
+.subtle-button:hover {
+  border-color: rgba(121, 215, 255, 0.28);
+  background: rgba(121, 215, 255, 0.1);
+}
+
+.field-label {
+  @apply mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-400;
+}
+
+.field-select {
+  @apply w-full rounded-2xl border px-4 py-3 text-sm text-slate-100 outline-none transition;
+  border-color: rgba(121, 215, 255, 0.12);
+  background: rgba(6, 13, 24, 0.72);
+}
+
+.field-select:focus {
+  border-color: rgba(121, 215, 255, 0.45);
+  box-shadow: 0 0 0 3px rgba(121, 215, 255, 0.12);
+}
+
+.status-pill {
+  @apply inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.18em];
+  border-color: rgba(121, 215, 255, 0.15);
+  background: rgba(121, 215, 255, 0.06);
+  color: #d7ecff;
+}
+
+.warning-pill {
+  @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium;
+  border-color: rgba(255, 202, 107, 0.22);
+  background: rgba(255, 202, 107, 0.1);
+  color: #ffd790;
+}
+
+.toggle-track {
+  @apply relative inline-flex h-7 w-12 items-center rounded-full transition;
+  background: rgba(121, 215, 255, 0.14);
+}
+
+.toggle-track[data-state="on"] {
+  background: linear-gradient(135deg, rgba(121, 215, 255, 0.88), rgba(159, 255, 224, 0.65));
+}
+
+.toggle-thumb {
+  @apply inline-block h-5 w-5 rounded-full bg-white shadow transition;
+}
