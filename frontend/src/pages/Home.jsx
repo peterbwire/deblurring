@@ -27,7 +27,10 @@ const defaultSettings = {
   denoise_strength: "medium",
   deblur_mode: "standard",
   sharpen_edges: true,
+  deblur_iterations: 18,
+  psf_sigma: 1.5,
   upscale: "none",
+  use_supervised_model: false,
   evidence_safe: true,
 };
 
@@ -63,6 +66,7 @@ export default function Home() {
   const [originalUrl, setOriginalUrl] = useState("");
   const [restoredUrl, setRestoredUrl] = useState("");
   const [auditLog, setAuditLog] = useState(null);
+  const [previousRestoredUrl, setPreviousRestoredUrl] = useState("");
   const [warnings, setWarnings] = useState([]);
   const [duration, setDuration] = useState(null);
   const [logUrl, setLogUrl] = useState("");
@@ -308,6 +312,19 @@ export default function Home() {
           setRestoredUrl(absoluteUrl(response.restored_url));
           setWarnings(response.warnings || []);
           setAuditLog(response.audit_log);
+          // if a comparison with previous run exists, fetch its signed restored_url
+          const prevName = response.audit_log?.comparison_with_previous?.previous_run;
+          if (prevName) {
+            try {
+              getProcessStatus(jobId, prevName).then((prevResp) => {
+                setPreviousRestoredUrl(absoluteUrl(prevResp.restored_url));
+              });
+            } catch {
+              setPreviousRestoredUrl("");
+            }
+          } else {
+            setPreviousRestoredUrl("");
+          }
           setDuration(response.duration_seconds);
           setLogUrl(response.log_url);
           setImageDownloadUrl(response.image_download_url);
@@ -417,6 +434,8 @@ export default function Home() {
             <PreviewPanel
               originalUrl={originalUrl}
               restoredUrl={restoredUrl}
+              previousRestoredUrl={previousRestoredUrl}
+              comparisonMetrics={auditLog?.comparison_with_previous}
               duration={duration}
               warnings={warnings}
               onCopyWarning={handleCopyWarning}

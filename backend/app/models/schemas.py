@@ -28,6 +28,10 @@ class ProcessRequest(BaseModel):
     denoise_strength: DenoiseStrength = "medium"
     deblur_mode: DeblurMode = "standard"
     sharpen_edges: bool = True
+    # Advanced deblur tuning (optional)
+    deblur_iterations: int = 18
+    psf_sigma: float = 1.5
+    use_supervised_model: bool = False
     upscale: UpscaleSetting = "none"
     evidence_safe: bool = True
 

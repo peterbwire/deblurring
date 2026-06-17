@@ -114,6 +114,31 @@ export default function ControlPanel({
           </select>
         </label>
 
+        <label>
+          <span className="field-label">Deblur iterations</span>
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={settings.deblur_iterations}
+            onChange={(e) => onSettingChange("deblur_iterations", Number(e.target.value))}
+            className="field-input"
+          />
+        </label>
+
+        <label>
+          <span className="field-label">PSF sigma</span>
+          <input
+            type="number"
+            step="0.1"
+            min={0.1}
+            max={10}
+            value={settings.psf_sigma}
+            onChange={(e) => onSettingChange("psf_sigma", Number(e.target.value))}
+            className="field-input"
+          />
+        </label>
+
         <label className="md:col-span-2">
           <span className="field-label">Upscale</span>
           <select
@@ -142,6 +167,12 @@ export default function ControlPanel({
           description="Limits aggressive settings and skips riskier enhancement steps."
           checked={settings.evidence_safe}
           onChange={(value) => onSettingChange("evidence_safe", value)}
+        />
+        <ToggleRow
+          label="Use supervised model"
+          description="Apply an optional learned restoration model (if configured on server)."
+          checked={settings.use_supervised_model}
+          onChange={(value) => onSettingChange("use_supervised_model", value)}
         />
       </div>
 

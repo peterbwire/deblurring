@@ -5,12 +5,20 @@ from typing import Any, Callable
 from PIL import Image, ImageOps
 
 from app.models.schemas import ProcessRequest
-from app.services.file_manager import calculate_file_sha256, get_run_output_path, read_job_manifest
+from app.services.file_manager import (
+    calculate_file_sha256,
+    get_run_output_path,
+    read_job_manifest,
+    get_job_output_dir,
+)
+from app.utils.metrics import compare_images_by_path
 from app.services.logger_service import current_timestamp, write_audit_log
 from app.utils.image_ops import (
     apply_clahe_luminance,
     apply_unsharp_mask,
     approximate_deconvolution,
+    lucy_richardson_deconvolution,
+    multi_scale_deblur,
     denoise_image,
     edge_aware_sharpen,
     estimate_noise,
@@ -21,6 +29,8 @@ from app.utils.image_ops import (
     split_alpha,
     upscale_image,
 )
+
+from app.services.supervised_model import default_restorer
 
 
 EVIDENCE_WARNING = (
@@ -118,12 +128,32 @@ def process_image(
         steps.append("Applied edge-aware sharpening.")
 
     if profile["deconv_weight"] > 0 and not settings.evidence_safe:
-        working_image = approximate_deconvolution(working_image, weight=profile["deconv_weight"])
-        steps.append("Applied light deconvolution-inspired kernel restoration.")
+        # For aggressive profiles, use a stronger Lucy–Richardson deconvolution
+        if effective_deblur == "aggressive":
+            # Use client-tunable parameters when provided, otherwise derive from profile
+            psf_sigma = getattr(settings, "psf_sigma", profile["sigma"]) or profile["sigma"]
+            iterations = getattr(settings, "deblur_iterations", 22)
+            try:
+                working_image = multi_scale_deblur(working_image, psf_sigma=psf_sigma, iterations=iterations, levels=1)
+                steps.append(f"Applied multi-scale Lucy–Richardson deconvolution (aggressive, psf_sigma={psf_sigma}, iter={iterations}).")
+            except Exception:
+                # fallback to single-scale Lucy–Richardson
+                working_image = lucy_richardson_deconvolution(working_image, psf_sigma=psf_sigma, iterations=max(8, iterations // 2))
+                steps.append("Applied Lucy–Richardson deconvolution (fallback).")
+        else:
+            working_image = approximate_deconvolution(working_image, weight=profile["deconv_weight"])
+            steps.append("Applied light deconvolution-inspired kernel restoration.")
     elif profile["deconv_weight"] > 0 and settings.evidence_safe:
         steps.append("Skipped deconvolution-inspired restoration due to evidence-safe mode.")
 
     report_progress("contrast_balancing")
+    # Optionally apply supervised restoration model if enabled and available
+    if getattr(settings, "use_supervised_model", False) and default_restorer and default_restorer.is_available():
+        try:
+            working_image = default_restorer.restore(working_image)
+            steps.append("Applied supervised restoration model.")
+        except Exception:
+            steps.append("Supervised model application failed; continuing with classical pipeline.")
     clahe_clip = 1.6 if settings.evidence_safe else 2.0
     working_image = apply_clahe_luminance(working_image, clip_limit=clahe_clip)
     steps.append("Enhanced luminance contrast with gentle CLAHE.")
@@ -142,6 +172,28 @@ def process_image(
     output_path = get_run_output_path(job_id, run_id, suffix=".png")
     save_image(str(output_path), final_image)
     output_sha256 = calculate_file_sha256(output_path)
+
+    # If there are previous runs for this job, compare the new output to the most recent previous output
+    try:
+        prev_comp: dict | None = None
+        job_out_dir = get_job_output_dir(job_id)
+        if job_out_dir.exists():
+            other_runs = [p for p in job_out_dir.iterdir() if p.is_dir() and p.name != run_id]
+            if other_runs:
+                latest = sorted(other_runs, key=lambda p: p.stat().st_mtime, reverse=True)[0]
+                prev_path = latest / "restored.png"
+                if prev_path.exists():
+                    try:
+                        prev_comp = compare_images_by_path(str(prev_path), str(output_path))
+                    except Exception:
+                        prev_comp = None
+        if prev_comp:
+            # attach comparison summary to audit
+            comp_summary = {"previous_run": latest.name, **prev_comp}
+        else:
+            comp_summary = None
+    except Exception:
+        comp_summary = None
 
     duration_seconds = round(time.perf_counter() - started_at, 3)
     output_height, output_width = working_image.shape[:2]
@@ -176,6 +228,8 @@ def process_image(
         "warnings": unique_messages(warnings),
         "runtime_seconds": duration_seconds,
         "estimated_noise_sigma": round(estimated_noise, 4),
+        "deblur_iterations_used": getattr(settings, "deblur_iterations", None),
+        "psf_sigma_used": getattr(settings, "psf_sigma", None),
         "requested_settings": requested_settings,
         "inspection": inspection,
         "output_scale_factor": output_scale,
@@ -183,6 +237,7 @@ def process_image(
             "enabled": False,
             "notes": "PyTorch model hooks can be added here for supervised restoration models in a later phase.",
         },
+        "comparison_with_previous": comp_summary,
     }
     log_path = write_audit_log(job_id, run_id, audit_log)
 

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 from skimage.restoration import estimate_sigma
+from skimage.restoration import richardson_lucy
 
 
 MAX_IMAGE_PIXELS = int(os.getenv("FORENSICLEAR_MAX_IMAGE_PIXELS", "40000000"))
@@ -147,3 +148,66 @@ def estimate_noise(image: np.ndarray) -> float:
     rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
     sigma = estimate_sigma(rgb_image, channel_axis=-1, average_sigmas=True)
     return float(sigma)
+
+
+def _gaussian_psf(size: int, sigma: float) -> np.ndarray:
+    """Generate a normalized 2D Gaussian PSF kernel."""
+    if size % 2 == 0:
+        size += 1
+    ax = np.arange(-size // 2 + 1.0, size // 2 + 1.0)
+    xx, yy = np.meshgrid(ax, ax)
+    kernel = np.exp(-(xx**2 + yy**2) / (2.0 * sigma**2))
+    kernel /= np.sum(kernel)
+    return kernel.astype(np.float32)
+
+
+def lucy_richardson_deconvolution(image: np.ndarray, psf_sigma: float = 1.5, iterations: int = 30) -> np.ndarray:
+    """Perform Lucy-Richardson deconvolution on a BGR image.
+
+    This applies the algorithm per-channel and returns an 8-bit BGR image.
+    """
+    if image.ndim == 2 or image.shape[2] == 1:
+        gray = image.astype(np.float32) / 255.0
+        psf_size = max(3, int(psf_sigma * 6))
+        psf = _gaussian_psf(psf_size, psf_sigma)
+        restored = richardson_lucy(gray, psf, num_iter=iterations)
+        restored = np.clip(restored * 255.0, 0, 255).astype(np.uint8)
+        return restored
+
+    # color image: split channels and process independently
+    b, g, r = cv2.split(image)
+    channels = []
+    psf_size = max(3, int(psf_sigma * 6))
+    psf = _gaussian_psf(psf_size, psf_sigma)
+    for ch in (b, g, r):
+        arr = ch.astype(np.float32) / 255.0
+        restored_ch = richardson_lucy(arr, psf, num_iter=iterations)
+        restored_ch = np.clip(restored_ch * 255.0, 0, 255).astype(np.uint8)
+        channels.append(restored_ch)
+
+    restored = cv2.merge(tuple(channels))
+    return restored
+
+
+def multi_scale_deblur(image: np.ndarray, psf_sigma: float = 1.5, iterations: int = 20, levels: int = 2) -> np.ndarray:
+    """Multi-scale deblurring: deconvolve at lower resolution then refine at full size."""
+    working = image.copy()
+    # Downscale
+    small = working.copy()
+    for _ in range(levels):
+        small = cv2.pyrDown(small)
+
+    # Apply LR on small
+    small_restored = lucy_richardson_deconvolution(small, psf_sigma=max(0.7, psf_sigma / 2.0), iterations=max(8, iterations // 2))
+
+    # Upscale back
+    up = small_restored
+    for _ in range(levels):
+        up = cv2.pyrUp(up)
+
+    # Resize exactly to original
+    up = cv2.resize(up, (working.shape[1], working.shape[0]), interpolation=cv2.INTER_CUBIC)
+
+    # Blend with original to avoid over-sharpening
+    blended = cv2.addWeighted(working.astype(np.float32), 0.6, up.astype(np.float32), 0.4, 0)
+    return np.clip(blended, 0, 255).astype(np.uint8)

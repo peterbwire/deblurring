@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 export default function PreviewPanel({
   originalUrl,
   restoredUrl,
+  previousRestoredUrl,
+  comparisonMetrics,
   duration,
   warnings,
   onCopyWarning,
@@ -14,6 +16,7 @@ export default function PreviewPanel({
 
   const hasImages = Boolean(originalUrl);
   const hasComparison = Boolean(originalUrl && restoredUrl);
+  const hasPrevious = Boolean(previousRestoredUrl);
   const copyLabel = useMemo(() => {
     if (copyState === "copied") {
       return "Caution Copied";
@@ -117,6 +120,17 @@ export default function PreviewPanel({
                 <div className="aspect-[4/3] overflow-hidden rounded-3xl bg-slate-950/80">
                   <img src={restoredUrl} alt="Restored output" className="h-full w-full object-contain" />
                 </div>
+                {comparisonMetrics ? (
+                  <div className="mt-3 text-xs text-slate-300">
+                    <div>Compared to: <strong>{comparisonMetrics.previous_run}</strong></div>
+                    <div>SSIM: <strong>{comparisonMetrics.ssim}</strong> • PSNR: <strong>{comparisonMetrics.psnr} dB</strong></div>
+                    {hasPrevious ? (
+                      <div className="mt-2 flex gap-2">
+                        <button type="button" className="subtle-button" onClick={() => window.open(previousRestoredUrl, "_blank")}>Open previous</button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : (
