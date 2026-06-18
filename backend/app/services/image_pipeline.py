@@ -148,12 +148,15 @@ def process_image(
 
     report_progress("contrast_balancing")
     # Optionally apply supervised restoration model if enabled and available
+    supervised_model_summary = default_restorer.model_summary() if default_restorer else None
     if getattr(settings, "use_supervised_model", False) and default_restorer and default_restorer.is_available():
         try:
             working_image = default_restorer.restore(working_image)
             steps.append("Applied supervised restoration model.")
         except Exception:
             steps.append("Supervised model application failed; continuing with classical pipeline.")
+    elif getattr(settings, "use_supervised_model", False):
+        steps.append("Supervised restoration model was requested but is not available on the server.")
     clahe_clip = 1.6 if settings.evidence_safe else 2.0
     working_image = apply_clahe_luminance(working_image, clip_limit=clahe_clip)
     steps.append("Enhanced luminance contrast with gentle CLAHE.")
@@ -233,9 +236,9 @@ def process_image(
         "requested_settings": requested_settings,
         "inspection": inspection,
         "output_scale_factor": output_scale,
-        "future_model_placeholder": {
-            "enabled": False,
-            "notes": "PyTorch model hooks can be added here for supervised restoration models in a later phase.",
+        "supervised_model": {
+            "requested": bool(getattr(settings, "use_supervised_model", False)),
+            "summary": supervised_model_summary,
         },
         "comparison_with_previous": comp_summary,
     }

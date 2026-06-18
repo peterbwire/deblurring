@@ -37,6 +37,7 @@ ForensiClear is a production-style MVP for lawful forensic-style image restorati
 - NumPy
 - Pillow
 - scikit-image
+- ONNX Runtime for optional supervised restoration
 - SQLite
 
 ## Project structure
@@ -74,6 +75,17 @@ uvicorn app.main:app --reload
 ```
 
 5. Open the API at `http://localhost:8000` or the docs at `http://localhost:8000/docs`.
+
+### Optional supervised model
+
+The backend can run an image-to-image ONNX restoration model when the UI toggle is enabled. Download a direct `.onnx` file into the default location:
+
+```bash
+cd backend
+python scripts/download_model.py --url https://example.com/restoration.onnx
+```
+
+By default the app looks for `backend/models/restoration.onnx`. Set `FORENSICLEAR_MODEL_PATH` to use a different model path.
 
 ## Run the frontend
 

@@ -1,114 +1,93 @@
-"""Download and optionally convert a pretrained restoration model.
+"""Download a direct ONNX restoration model for the supervised pipeline.
 
 Usage:
-  python download_model.py [--onnx]
+  python scripts/download_model.py --url https://.../model.onnx
 
-Downloads NAFNet-sRGB from huggingface and optionally converts to ONNX.
-Outputs to backend/models/nafnet.pth or backend/models/nafnet.onnx
+The app loads ``backend/models/restoration.onnx`` by default. You can override
+the runtime path with ``FORENSICLEAR_MODEL_PATH``.
 """
+
+from __future__ import annotations
+
+import argparse
+import os
 import sys
+import urllib.request
 from pathlib import Path
 
-# Add backend to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+
+DEFAULT_MODEL_URL_ENV = "FORENSICLEAR_MODEL_URL"
+DEFAULT_OUTPUT_NAME = "restoration.onnx"
 
 
-def download_nafnet():
-    """Download NAFNet model from huggingface."""
-    import torch
-    from diffusers import StableDiffusionInpaintPipeline
-    
-    models_dir = Path(__file__).parent.parent / "models"
-    models_dir.mkdir(exist_ok=True)
-    
-    # Download NAFNet from huggingface (sRGB variant)
-    model_url = "https://huggingface.co/AlexanderPavlenko/NAFNet-sRGB-32/resolve/main/model_state.pth"
-    model_path = models_dir / "nafnet_srgb_32.pth"
-    
-    if model_path.exists():
-        print(f"Model already exists at {model_path}")
-        return model_path
-    
-    print(f"Downloading NAFNet model...")
-    try:
-        import urllib.request
-        urllib.request.urlretrieve(model_url, str(model_path))
-        print(f"Downloaded to {model_path}")
-        return model_path
-    except Exception as e:
-        print(f"Failed to download: {e}")
-        print("Attempting alternative: using torch hub...")
-        try:
-            # Try loading via torch hub as fallback
-            model = torch.hub.load('AlexanderPavlenko/NAFNet:main', 'NAFNet', pretrained=True)
-            torch.save(model.state_dict(), model_path)
-            print(f"Downloaded via torch hub to {model_path}")
-            return model_path
-        except Exception as e2:
-            print(f"Alternative download also failed: {e2}")
-            return None
+def download_file(url: str, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if output_path.exists() and output_path.stat().st_size > 0:
+        print(f"Model already exists at {output_path}")
+        return output_path
+
+    temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+    print(f"Downloading ONNX model from {url}")
+    with urllib.request.urlopen(url, timeout=120) as response:
+        with temp_path.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+    temp_path.replace(output_path)
+    print(f"Downloaded model to {output_path}")
+    return output_path
 
 
-def convert_to_onnx(model_path):
-    """Convert PyTorch model to ONNX format."""
-    import torch
-    import onnx
-    
-    try:
-        onnx_path = model_path.with_suffix(".onnx")
-        
-        if onnx_path.exists():
-            print(f"ONNX model already exists at {onnx_path}")
-            return onnx_path
-        
-        print(f"Converting {model_path} to ONNX...")
-        
-        # Create a dummy input
-        dummy_input = torch.randn(1, 3, 64, 64)
-        
-        # Load model (pseudo-load for demo; real implementation loads actual architecture)
-        print("Note: Full model loading requires the actual model code.")
-        print("For now, creating a simple conversion template.")
-        
-        # Simplified approach: save as ONNX with minimal wrapper
-        torch.onnx.export(
-            torch.nn.Identity(),  # placeholder
-            dummy_input,
-            str(onnx_path),
-            input_names=["input"],
-            output_names=["output"],
-            opset_version=14,
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Download an ONNX restoration model.")
+    parser.add_argument(
+        "--url",
+        default=os.getenv(DEFAULT_MODEL_URL_ENV),
+        help=f"Direct .onnx URL. Defaults to {DEFAULT_MODEL_URL_ENV}.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / "models" / DEFAULT_OUTPUT_NAME,
+        help="Output path for the ONNX model.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace an existing output file.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
+    if not args.url:
+        print(
+            "No model URL provided. Pass --url or set "
+            f"{DEFAULT_MODEL_URL_ENV} to a direct .onnx download URL."
         )
-        print(f"Created ONNX template at {onnx_path}")
-        return onnx_path
-    except Exception as e:
-        print(f"Conversion failed: {e}")
-        return None
+        return 2
 
+    output_path = args.output
+    if output_path.suffix.lower() != ".onnx":
+        print("Output path must end in .onnx")
+        return 2
 
-def main(argv):
+    if args.force and output_path.exists():
+        output_path.unlink()
+
     try:
-        model_path = download_nafnet()
-        if not model_path:
-            print("Failed to download model")
-            return 1
-        
-        if "--onnx" in argv:
-            onnx_path = convert_to_onnx(model_path)
-            if onnx_path:
-                print(f"Model ready: {onnx_path}")
-            else:
-                print("Conversion to ONNX failed, but PyTorch model is ready")
-        else:
-            print(f"Model ready: {model_path}")
-        
+        model_path = download_file(args.url, output_path)
+        print("Set FORENSICLEAR_MODEL_PATH to this path if you use a custom location:")
+        print(model_path)
         return 0
-    except Exception as e:
-        print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception as exc:
+        print(f"Download failed: {exc}")
         return 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main(sys.argv[1:]))
